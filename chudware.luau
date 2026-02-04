@@ -7,6 +7,8 @@ local players = game:GetService("Players")
 local runService = game:GetService("RunService")
 local userInputService = game:GetService("UserInputService")
 local localPlayer = players.LocalPlayer
+local replicatedStorage = game:GetService("ReplicatedStorage")
+local teams = replicatedStorage:WaitForChild("Teams")
 
 
 --configs
@@ -28,6 +30,7 @@ local espSettings = {
     thickness = 1.5,
     cornerSize = 0.2,
     enabled = true,
+    teamcheck = false,
     
 }
 
@@ -85,6 +88,7 @@ local function saveConfig()
             thickness = espSettings.thickness,
             cornerSize = espSettings.cornerSize,
             enabled = espSettings.enabled,
+            teamcheck = espSettings.teamcheck,
         },
         chams = {
             fillColor = colorToTable(chamsSettings.fillColor),
@@ -272,9 +276,12 @@ local chamsTransparency = tab2.new("slider", {
     value = 0,
     rounding = 1,
 })
-chamsTransparency.event:Connect(function(value)
-    chamsSettings.fillTransparency = value / 10
-end)
+local teamcheck2 = tab2.new("switch", {
+    text = "teamcheck",
+    on = espSettings.teamcheck,
+})
+
+
 --misc tab
 local tab3 = window1.new({
     text = "misc",
@@ -338,8 +345,29 @@ local function isVisible(targetPart)
 end
 
 local function isSameTeam(player)
-    if not localPlayer.Team or not player.Team then return false end
-    return localPlayer.Team == player.Team
+    if not silentAimSettings.teamcheck then return false end
+    
+    local ctFolder = teams:FindFirstChild("CT")
+    local tFolder = teams:FindFirstChild("T")
+    
+    local localPlayerTeam = nil
+    local targetPlayerTeam = nil
+
+    if ctFolder:FindFirstChild(localPlayer.Name) then
+        localPlayerTeam = "CT"
+    elseif tFolder:FindFirstChild(localPlayer.Name) then
+        localPlayerTeam = "T"
+    end
+
+    if ctFolder:FindFirstChild(player.Name) then
+        targetPlayerTeam = "CT"
+    elseif tFolder:FindFirstChild(player.Name) then
+        targetPlayerTeam = "T"
+    end
+
+    if not localPlayerTeam or not targetPlayerTeam then return false end
+
+    return localPlayerTeam == targetPlayerTeam
 end
 --chams
 local chamsHighlights = {}
@@ -348,20 +376,21 @@ local function applychams(player)
     if player == localPlayer then return end
 
     local function onCharacterAdded(character)
-        -- Remove old highlight if it exists
         if chamsHighlights[player] then
             chamsHighlights[player]:Destroy()
         end
 
         local highlight = Instance.new("Highlight")
-        highlight.Name = "ChudCham"
+        highlight.Name = "⢦⇏ⲼⱱⰈ⥫⻉ⱨ⽅ℇ◞⦤┹⮏⟺⸡℩⩱⊽⦜⤹⁜⋎⻝◂⥝⎏✷⻲ⓓ⧓♰ⴈ⥼ⴽ∆⭆⛰"
         highlight.Adornee = character
         highlight.FillColor = chamsSettings.fillColor
         highlight.FillTransparency = chamsSettings.fillTransparency
         highlight.OutlineTransparency = chamsSettings.outlineTransparency
-        highlight.Enabled = chamsSettings.enabled 
-        highlight.Parent = character 
+
+        local isTeammate = isSameTeam(player)
+        highlight.Enabled = chamsSettings.enabled and (not espSettings.teamcheck or not isTeammate)
         
+        highlight.Parent = character 
         chamsHighlights[player] = highlight
     end
 
@@ -374,17 +403,29 @@ end
 local function updateChams()
     for player, highlight in pairs(chamsHighlights) do
         if highlight and highlight.Parent then
-            highlight.Enabled = chamsSettings.enabled
+            local isTeammate = isSameTeam(player)
+
+            highlight.Enabled = chamsSettings.enabled and (not espSettings.teamcheck or not isTeammate)
+            
             highlight.FillColor = chamsSettings.fillColor
             highlight.FillTransparency = chamsSettings.fillTransparency
+            highlight.OutlineTransparency = chamsSettings.outlineTransparency
         else
             chamsHighlights[player] = nil
         end
     end
 end
---gui here because
+--
 chamsColor.event:Connect(function(color)
     chamsSettings.fillColor = color
+    updateChams()
+end)
+chamsTransparency.event:Connect(function(value)
+    chamsSettings.fillTransparency = value / 10
+    updateChams()
+end)
+teamcheck2.event:Connect(function(bool)
+    espSettings.teamcheck = bool
     updateChams()
 end)
 -- esp
@@ -403,6 +444,24 @@ local function createEsp(player)
             or not player.Character:FindFirstChild("HumanoidRootPart")
             or not player.Parent
             or not espSettings.enabled
+        then
+            for _, lines in pairs(drawings) do
+                lines[1].Visible = false
+                lines[2].Visible = false
+            end
+            if not player.Parent then
+                connection:Disconnect()
+            end
+            return
+        end
+
+        local isTeammate = isSameTeam(player)
+        
+        if not player.Character
+            or not player.Character:FindFirstChild("HumanoidRootPart")
+            or not player.Parent
+            or not espSettings.enabled
+            or (espSettings.teamcheck and isTeammate)
         then
             for _, lines in pairs(drawings) do
                 lines[1].Visible = false
@@ -529,6 +588,10 @@ runService.RenderStepped:Connect(function()
     closestHitPart = closestPart
 
     if closestHitPart and silentAimSettings.showtracer then
+        if silentAimSettings.teamcheck and isSameTeam(players:GetPlayerFromCharacter(closestHitPart.Parent)) then
+            tracerLine.Visible = false
+            return
+        end
         local screenPos = camera:WorldToViewportPoint(closestHitPart.Position)
         tracerLine.From = Vector2.new(camera.ViewportSize.X / 2, camera.ViewportSize.Y)
         tracerLine.To = Vector2.new(screenPos.X, screenPos.Y)
@@ -568,4 +631,7 @@ for _, player in pairs(players:GetPlayers()) do
     end
 end
 
-players.PlayerAdded:Connect(createEsp)
+players.PlayerAdded:Connect(function(player)
+    createEsp(player)
+    applychams(player)
+end)
