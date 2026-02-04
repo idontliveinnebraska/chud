@@ -546,17 +546,14 @@ oldNamecall = hookmetamethod(game, "__namecall", newcclosure(function(self, ...)
 
     if self == workspace and method == "Raycast" and not checkcaller() and silentAimSettings.enabled then
         if closestHitPart then
+
+            if silentAimSettings.wallbang and args[3] then
+                local params = args[3]
+                params.FilterType = Enum.RaycastFilterType.Include
+                params.FilterDescendantsInstances = { closestHitPart.Parent }
+            end
             local origin = args[1]
             args[2] = getDirection(origin, closestHitPart.Position) * 1000
-
-            if silentAimSettings.wallbang then
-                local wallbangParams = RaycastParams.new()
-                wallbangParams.FilterType = Enum.RaycastFilterType.Include
-                wallbangParams.FilterDescendantsInstances = { closestHitPart.Parent }
-                
-                args[3] = wallbangParams
-            end
-            
             return oldNamecall(self, unpack(args))
         end
     end
